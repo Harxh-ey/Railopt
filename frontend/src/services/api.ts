@@ -6,7 +6,7 @@ import {
 
 // Production: FastAPI serves frontend from same origin → relative /api/... calls work
 // Dev: Vite proxy forwards /api → localhost:8000 → also works with relative URLs
-const BASE_URL = '';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
 async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${endpoint}`, {
