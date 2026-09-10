@@ -4,9 +4,8 @@ backend/__pycache__/
 backend/*.pyc
 *.egg-info/
 
-# Node
+# Node - exclude heavy deps but KEEP built dist
 frontend/node_modules/
-frontend/dist/
 
 # OS
 .DS_Store

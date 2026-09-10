@@ -4,9 +4,9 @@ import {
   DashboardData, WhatIfResult
 } from '../types';
 
-// Production: FastAPI serves frontend → same origin → relative URLs work (BASE_URL = '')
-// Dev: Vite proxy forwards /api → localhost:8000 → relative URLs also work
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) ?? '';
+// Production: FastAPI serves frontend from same origin → relative /api/... calls work
+// Dev: Vite proxy forwards /api → localhost:8000 → also works with relative URLs
+const BASE_URL = '';
 
 async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${endpoint}`, {
