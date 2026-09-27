@@ -46,7 +46,16 @@ async def seed_data():
                 hashed_password=get_password_hash("RailOpt@2026!"),
                 role=u["role"],
                 department_id=u["dept"]
-            ).on_conflict_do_nothing(index_elements=["email"])
+            ).on_conflict_do_update(
+                index_elements=["email"],
+                set_={
+                    "hashed_password": get_password_hash("RailOpt@2026!"),
+                    "role": u["role"],
+                    "full_name": u["name"],
+                    "department_id": u["dept"],
+                    "is_active": True
+                }
+            )
             await db.execute(stmt)
         await db.commit()
         print(f"  Seeded {len(demo_users)} demo users")

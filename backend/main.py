@@ -60,8 +60,10 @@ async def _load_database_from_db():
             forecasts_rows = (await db.execute(sa_select(db_models.TrainForecast))).scalars().all()
             windows_rows = (await db.execute(sa_select(db_models.BlockWindow))).scalars().all()
 
-        if not stations_rows:
-            print("INFO: DB is empty — auto-seeding initial database data...")
+            user_row = (await db.execute(sa_select(db_models.User))).scalars().first()
+
+        if not stations_rows or not user_row:
+            print("INFO: DB is empty or demo users missing — auto-seeding initial database data...")
             try:
                 from seed import seed_data
                 await seed_data()
