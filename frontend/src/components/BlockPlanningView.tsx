@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Play, RefreshCw, Download, BarChart2, ChevronRight, ArrowUpDown
+  Play, RefreshCw, Download, BarChart2, ChevronRight, ArrowUpDown, Lock
 } from 'lucide-react';
 import { api } from '../services/api';
 import { Block, OptimizationRun, BaselineComparisonMetrics } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 interface BlockPlanningViewProps {
   onInspectBlock: (blockId: string) => void;
@@ -22,6 +23,8 @@ const deptBarColor = (dept: string) => {
 };
 
 export const BlockPlanningView: React.FC<BlockPlanningViewProps> = ({ onInspectBlock }) => {
+  const { isReadOnly } = useAuth();
+  const readOnly = isReadOnly();
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [telemetry, setTelemetry] = useState<OptimizationRun | null>(null);
   const [comparison, setComparison] = useState<BaselineComparisonMetrics[]>([]);
@@ -154,14 +157,20 @@ export const BlockPlanningView: React.FC<BlockPlanningViewProps> = ({ onInspectB
 
             {/* Action Buttons */}
             <div className="flex items-center gap-2 ml-auto">
-              <button
-                onClick={handleGeneratePlan}
-                disabled={loading}
-                className="flex items-center gap-2 bg-railway-blue hover:bg-railway-blue-dark text-white text-xs font-semibold px-4 py-2 rounded border border-blue-900 transition disabled:opacity-50"
-              >
-                {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 fill-white" />}
-                Generate Plan
-              </button>
+              {readOnly ? (
+                <span className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 text-slate-500 text-xs rounded border border-slate-200">
+                  <Lock className="w-3.5 h-3.5" /> View Only
+                </span>
+              ) : (
+                <button
+                  onClick={handleGeneratePlan}
+                  disabled={loading}
+                  className="flex items-center gap-2 bg-railway-blue hover:bg-railway-blue-dark text-white text-xs font-semibold px-4 py-2 rounded border border-blue-900 transition disabled:opacity-50"
+                >
+                  {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 fill-white" />}
+                  Generate Plan
+                </button>
+              )}
 
               <button
                 onClick={() => setShowBaseline(!showBaseline)}

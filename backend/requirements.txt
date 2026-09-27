@@ -4,3 +4,11 @@ pydantic>=2.6.0
 ortools>=9.9.0
 numpy>=1.26.0
 pandas>=2.2.0
+
+sqlalchemy[asyncio]>=2.0
+asyncpg
+alembic
+python-jose[cryptography]
+passlib[bcrypt]
+python-dotenv
+email-validator

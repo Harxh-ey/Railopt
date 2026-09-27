@@ -1,15 +1,41 @@
-import React from 'react';
-import { X, Wrench } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Wrench, Check, RefreshCw } from 'lucide-react';
 import { MaintenanceJob } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { api } from '../services/api';
 
 interface JobDetailModalProps {
   job: MaintenanceJob | null;
   onClose: () => void;
   onViewBlock?: (blockId: string) => void;
+  onJobUpdated?: (updatedJob: MaintenanceJob) => void;
 }
 
-export const JobDetailModal: React.FC<JobDetailModalProps> = ({ job, onClose, onViewBlock }) => {
+export const JobDetailModal: React.FC<JobDetailModalProps> = ({ job, onClose, onViewBlock, onJobUpdated }) => {
+  const { user, isReadOnly, canWrite } = useAuth();
+  const [updating, setUpdating] = useState(false);
+  const [statusMsg, setStatusMsg] = useState('');
+
   if (!job) return null;
+
+  const allowEdit = !isReadOnly() && (user?.role === 'SUPER_ADMIN' || canWrite(job.department));
+
+  const handleStatusChange = async (newStatus: string) => {
+    if (!job) return;
+    setUpdating(true);
+    setStatusMsg('');
+    try {
+      const updated = await api.updateMaintenanceJob(job.job_id, { status: newStatus });
+      if (onJobUpdated) onJobUpdated(updated);
+      setStatusMsg(`Status set to ${newStatus}`);
+      setTimeout(() => setStatusMsg(''), 2000);
+    } catch (e: any) {
+      console.error(e);
+      setStatusMsg('Update failed');
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   const cPoints = (job.criticality * 2.5).toFixed(1);
   const uPoints = (job.urgency * 2.5).toFixed(1);
@@ -107,13 +133,31 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({ job, onClose, on
                 <td className="py-2 px-3 font-mono text-slate-700">{job.due_date}</td>
                 <td className="py-2 px-3 font-semibold text-slate-500 text-[11px]">Status</td>
                 <td className="py-2 px-3">
-                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
-                    job.status === 'SCHEDULED' ? 'bg-green-50 text-green-700 border-green-200'
-                    : job.status === 'OVERDUE' ? 'bg-red-50 text-red-700 border-red-200'
-                    : 'bg-slate-100 text-slate-500 border-slate-200'
-                  }`}>
-                    {job.status}
-                  </span>
+                  {allowEdit ? (
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={job.status}
+                        disabled={updating}
+                        onChange={(e) => handleStatusChange(e.target.value)}
+                        className="border border-slate-300 rounded px-1.5 py-0.5 text-[11px] font-semibold bg-white focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="PENDING">PENDING</option>
+                        <option value="SCHEDULED">SCHEDULED</option>
+                        <option value="COMPLETED">COMPLETED</option>
+                        <option value="CANCELLED">CANCELLED</option>
+                      </select>
+                      {updating && <RefreshCw className="w-3 h-3 animate-spin text-blue-600" />}
+                      {statusMsg && <span className="text-[10px] text-green-700 font-semibold">{statusMsg}</span>}
+                    </div>
+                  ) : (
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+                      job.status === 'SCHEDULED' ? 'bg-green-50 text-green-700 border-green-200'
+                      : job.status === 'OVERDUE' ? 'bg-red-50 text-red-700 border-red-200'
+                      : 'bg-slate-100 text-slate-500 border-slate-200'
+                    }`}>
+                      {job.status}
+                    </span>
+                  )}
                 </td>
               </tr>
             </tbody>

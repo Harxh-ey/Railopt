@@ -9,13 +9,25 @@ import {
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
 async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const token = localStorage.getItem('railopt_token');
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...options?.headers,
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const res = await fetch(`${BASE_URL}${endpoint}`, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
+    headers,
   });
+  
+  if (res.status === 401) {
+    window.dispatchEvent(new Event('railopt-unauthorized'));
+  }
+  
   if (!res.ok) {
     const errorText = await res.text();
     throw new Error(`API Error [${res.status}]: ${errorText || res.statusText}`);
@@ -31,6 +43,10 @@ export const api = {
   getAssets: () => fetchJson<Asset[]>('/api/assets'),
   getDefects: () => fetchJson<Defect[]>('/api/defects'),
   getMaintenanceJobs: () => fetchJson<MaintenanceJob[]>('/api/maintenance-jobs'),
+  createMaintenanceJob: (payload: Omit<MaintenanceJob, 'job_id' | 'status' | 'overdue_days' | 'failure_history' | 'priority_score'>) =>
+    fetchJson<MaintenanceJob>('/api/maintenance-jobs', { method: 'POST', body: JSON.stringify(payload) }),
+  updateMaintenanceJob: (jobId: string, payload: Partial<MaintenanceJob>) =>
+    fetchJson<MaintenanceJob>(`/api/maintenance-jobs/${jobId}`, { method: 'PUT', body: JSON.stringify(payload) }),
   getTrains: () => fetchJson<Train[]>('/api/trains'),
   getBlockWindows: () => fetchJson<BlockWindow[]>('/api/block-windows'),
   getResources: () => fetchJson<Resource[]>('/api/resources'),
@@ -58,4 +74,5 @@ export const api = {
   getWeeklyPlan: () => fetchJson<{ planning_horizon: string; days: any[] }>('/api/plans/weekly'),
   getMonthlyPlan: () => fetchJson<{ monthly_summary: any; weeks: any[]; high_risk_assets: Asset[] }>('/api/plans/monthly'),
   getNetworkTopology: () => fetchJson<{ stations: Station[]; sections: Section[] }>('/api/network'),
+  getReport: (reportId: string) => fetchJson<any>(`/api/reports/${reportId}`),
 };

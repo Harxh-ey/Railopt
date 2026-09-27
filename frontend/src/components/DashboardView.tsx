@@ -9,6 +9,8 @@ import { api } from '../services/api';
 interface DashboardViewProps {
   data: DashboardData | null;
   loading: boolean;
+  error?: string | null;
+  onRetry?: () => void;
   onInspectBlock: (blockId: string) => void;
   onNavigateTab: (tab: string) => void;
   onInspectJob?: (job: any) => void;
@@ -31,6 +33,8 @@ const deptShort = (dept: string) => {
 export const DashboardView: React.FC<DashboardViewProps> = ({
   data,
   loading,
+  error,
+  onRetry,
   onInspectBlock,
   onNavigateTab,
   onInspectJob,
@@ -54,6 +58,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         setNetworkLoading(false);
       });
   }, []);
+
+  if (error || (!loading && !data)) {
+    return (
+      <div className="py-24 text-center text-slate-600 bg-white border border-slate-200 rounded p-8 max-w-md mx-auto my-12 shadow-sm space-y-4">
+        <div className="w-12 h-12 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto text-amber-600">
+          <AlertTriangle className="w-6 h-6" />
+        </div>
+        <div>
+          <h3 className="text-base font-bold text-slate-800">Unable to load planning data</h3>
+          <p className="text-xs text-slate-500 mt-1">{error || "Please check network connectivity or server availability and try again."}</p>
+        </div>
+        {onRetry && (
+          <button
+            onClick={onRetry}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded transition shadow-sm"
+          >
+            Retry
+          </button>
+        )}
+      </div>
+    );
+  }
 
   if (loading || !data) {
     return (

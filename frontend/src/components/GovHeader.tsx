@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import {
   Bell, Settings, ChevronDown, User, RefreshCw, Play,
   LayoutDashboard, Wrench, Layers, Calendar, CalendarRange,
-  Sliders, BarChart3, Database, FileText, RotateCcw
+  Sliders, BarChart3, Database, FileText, RotateCcw, LogOut
 } from 'lucide-react';
+import { User as AuthUser } from '../types/auth';
 
 interface GovHeaderProps {
   activeTab: string;
@@ -13,9 +14,11 @@ interface GovHeaderProps {
   onReset: () => void;
   isOptimizing: boolean;
   onOpenRunsModal: () => void;
+  user: AuthUser | null;
+  onLogout: () => void;
 }
 
-const navItems = [
+const baseNavItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'maintenance', label: 'Maintenance', icon: Wrench },
   { id: 'planning', label: 'Block Planning', icon: Layers },
@@ -35,8 +38,14 @@ export const GovHeader: React.FC<GovHeaderProps> = ({
   onReset,
   isOptimizing,
   onOpenRunsModal,
+  user,
+  onLogout,
 }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
+  
+  const navItems = user?.role === 'SUPER_ADMIN' 
+    ? [...baseNavItems, { id: 'admin', label: 'Administration', icon: Settings }]
+    : baseNavItems;
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
@@ -80,19 +89,21 @@ export const GovHeader: React.FC<GovHeaderProps> = ({
 
             <div className="hidden lg:block h-8 w-px bg-white/20"></div>
 
-            {/* Quick Re-optimize action */}
-            <button
-              onClick={onReoptimize}
-              disabled={isOptimizing}
-              className="hidden md:flex items-center gap-1.5 bg-white/10 hover:bg-white/20 border border-white/30 text-white text-xs font-semibold px-3 py-1.5 rounded transition disabled:opacity-50"
-              title="Re-run block plan optimization"
-            >
-              {isOptimizing
-                ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                : <Play className="w-3.5 h-3.5 fill-white" />
-              }
-              <span className="hidden lg:inline">{isOptimizing ? 'Optimizing...' : 'Run Optimizer'}</span>
-            </button>
+            {/* Quick Re-optimize action - Only for write-authorized users */}
+            {user?.role !== 'OPERATIONS_VIEWER' && (
+              <button
+                onClick={onReoptimize}
+                disabled={isOptimizing}
+                className="hidden md:flex items-center gap-1.5 bg-white/10 hover:bg-white/20 border border-white/30 text-white text-xs font-semibold px-3 py-1.5 rounded transition disabled:opacity-50"
+                title="Re-run block plan optimization"
+              >
+                {isOptimizing
+                  ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  : <Play className="w-3.5 h-3.5 fill-white" />
+                }
+                <span className="hidden lg:inline">{isOptimizing ? 'Optimizing...' : 'Run Optimizer'}</span>
+              </button>
+            )}
 
             {/* Notifications bell */}
             <button className="relative p-1.5 text-blue-200 hover:text-white transition">
@@ -107,21 +118,30 @@ export const GovHeader: React.FC<GovHeaderProps> = ({
                 className="flex items-center gap-2 text-blue-100 hover:text-white transition text-xs"
               >
                 <div className="w-7 h-7 rounded-full bg-white/20 border border-white/30 flex items-center justify-center text-white font-bold text-xs shrink-0">
-                  AK
+                  {user?.full_name ? user.full_name.substring(0, 2).toUpperCase() : 'U'}
                 </div>
                 <div className="hidden lg:block text-left">
-                  <div className="text-white text-[11px] font-semibold leading-none">A. K. Sharma</div>
-                  <div className="text-blue-200 text-[10px] leading-none mt-0.5">Sr. Divisional Planning Officer</div>
+                  <div className="text-white text-[11px] font-semibold leading-none">{user?.full_name || 'User'}</div>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    {user?.department_id && (
+                      <span className={`w-1.5 h-1.5 rounded-full inline-block ${
+                        user.department_id === 'ENG' ? 'bg-blue-400' :
+                        user.department_id === 'TRD' ? 'bg-amber-400' :
+                        user.department_id === 'SNT' ? 'bg-cyan-400' : 'bg-slate-400'
+                      }`}></span>
+                    )}
+                    <div className="text-blue-200 text-[10px] leading-none">{user?.role === 'SUPER_ADMIN' ? 'Super Admin' : user?.role}</div>
+                  </div>
                 </div>
                 <ChevronDown className="w-3 h-3 hidden lg:block" />
               </button>
 
               {showUserMenu && (
-                <div className="absolute right-0 top-9 w-48 bg-white border border-slate-200 rounded shadow-lg text-xs z-50">
+                <div className="absolute right-0 top-9 w-56 bg-white border border-slate-200 rounded shadow-lg text-xs z-50">
                   <div className="px-3 py-2.5 border-b border-slate-100">
-                    <div className="font-semibold text-slate-700">A. K. Sharma</div>
-                    <div className="text-slate-500 text-[11px]">Sr. Divisional Planning Officer</div>
-                    <div className="text-slate-400 text-[11px]">Northern Division, IR</div>
+                    <div className="font-semibold text-slate-700">{user?.full_name}</div>
+                    <div className="text-slate-500 text-[11px]">{user?.role}</div>
+                    <div className="text-slate-400 text-[11px]">{user?.department_name ? `${user.department_name}, Northern Division` : 'Northern Division, IR'}</div>
                   </div>
                   <button
                     onClick={() => { onOpenRunsModal(); setShowUserMenu(false); }}
@@ -129,18 +149,30 @@ export const GovHeader: React.FC<GovHeaderProps> = ({
                   >
                     Optimization History
                   </button>
+                  {user?.role !== 'OPERATIONS_VIEWER' && (
+                    <>
+                      <button
+                        onClick={() => { onReset(); setShowUserMenu(false); }}
+                        className="w-full text-left px-3 py-2 text-slate-600 hover:bg-slate-50 flex items-center gap-2"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        Reset Planning State
+                      </button>
+                      <button
+                        onClick={() => { onRunDemoSEC01(); setShowUserMenu(false); }}
+                        className="w-full text-left px-3 py-2 text-slate-600 hover:bg-slate-50"
+                      >
+                        Load SEC01 Demo Scenario
+                      </button>
+                    </>
+                  )}
+                  <div className="border-t border-slate-100 mt-1"></div>
                   <button
-                    onClick={() => { onReset(); setShowUserMenu(false); }}
-                    className="w-full text-left px-3 py-2 text-slate-600 hover:bg-slate-50 flex items-center gap-2"
+                    onClick={() => { onLogout(); setShowUserMenu(false); }}
+                    className="w-full text-left px-3 py-2 text-red-600 hover:bg-red-50 flex items-center gap-2 font-medium"
                   >
-                    <RotateCcw className="w-3 h-3" />
-                    Reset Planning State
-                  </button>
-                  <button
-                    onClick={() => { onRunDemoSEC01(); setShowUserMenu(false); }}
-                    className="w-full text-left px-3 py-2 text-slate-600 hover:bg-slate-50"
-                  >
-                    Load SEC01 Demo Scenario
+                    <LogOut className="w-3 h-3" />
+                    Sign Out
                   </button>
                 </div>
               )}

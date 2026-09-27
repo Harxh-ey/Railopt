@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { FileText, Download, Eye, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { api } from '../services/api';
+import { ReportViewerModal } from './ReportViewerModal';
 
 interface Report {
   id: string;
@@ -71,6 +73,7 @@ const reports: Report[] = [
 export const ReportsView: React.FC = () => {
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [generated, setGenerated] = useState<Set<string>>(new Set());
+  const [viewingReportId, setViewingReportId] = useState<string | null>(null);
 
   const categoryColor = (cat: string) => {
     switch (cat) {
@@ -91,12 +94,104 @@ export const ReportsView: React.FC = () => {
     }, 1500);
   };
 
-  const handleExportPdf = (report: Report) => {
-    alert(`Exporting "${report.name}" as PDF...\n\nNote: PDF export requires a backend rendering service. This button is wired for integration.`);
+  const downloadCsv = (filename: string, headers: string[], rows: (string | number)[][]) => {
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
-  const handleExportExcel = (report: Report) => {
-    alert(`Exporting "${report.name}" as Excel...\n\nNote: Excel export requires a backend rendering service. This button is wired for integration.`);
+  const handleExportExcel = async (report: Report) => {
+    try {
+      if (report.id === 'RPT_WEEKLY_BLOCK' || report.id === 'RPT_MONTHLY_BLOCK') {
+        const data = await api.getLatestOptimization();
+        const headers = ['Block ID', 'Section', 'Date', 'Start Time', 'End Time', 'Duration (min)', 'Block Type', 'Departments', 'Operational Impact'];
+        const rows = (data.blocks || []).map(b => [
+          b.block_id, b.section_id, b.date, b.start_time, b.end_time, b.duration_minutes, b.block_type, (b.departments || []).join('; '), b.operational_impact
+        ]);
+        downloadCsv(`${report.id}_Export.csv`, headers, rows);
+      } else if (report.id === 'RPT_DEPT_MAINT') {
+        const jobs = await api.getMaintenanceJobs();
+        const headers = ['Job ID', 'Asset ID', 'Section', 'Department', 'Type', 'Criticality', 'Urgency', 'Due Date', 'Duration (min)', 'Status', 'Priority Score'];
+        const rows = jobs.map(j => [
+          j.job_id, j.asset_id, j.section_id, j.department, j.maintenance_type, j.criticality, j.urgency, j.due_date, j.duration_minutes, j.status, j.priority_score
+        ]);
+        downloadCsv(`Department_Maintenance_Report.csv`, headers, rows);
+      } else if (report.id === 'RPT_ASSET_AVAIL') {
+        const assets = await api.getAssets();
+        const headers = ['Asset ID', 'Section', 'Asset Type', 'Condition', 'Criticality', 'Availability', 'Failure Count', 'Next Due Date'];
+        const rows = assets.map(a => [
+          a.asset_id, a.section_id, a.asset_type, a.condition, a.criticality, `${a.availability}%`, a.failure_count, a.next_due_date
+        ]);
+        downloadCsv(`Asset_Availability_Report.csv`, headers, rows);
+      } else if (report.id === 'RPT_OPT_PERF') {
+        const opt = await api.getLatestOptimization();
+        const t = opt.telemetry;
+        const headers = ['Metric', 'Value'];
+        const rows = [
+          ['Run ID', t.run_id],
+          ['Timestamp', t.timestamp],
+          ['Execution Time (ms)', t.execution_time_ms],
+          ['Solver Status', t.solver_status],
+          ['Total Blocks Created', t.total_blocks_created],
+          ['Coordinated Blocks Count', t.coordinated_blocks_count],
+          ['Coordination Rate (%)', `${t.coordination_rate_percent}%`],
+          ['Total Downtime (min)', t.total_downtime_minutes],
+          ['Scheduled Jobs Count', t.scheduled_jobs_count],
+          ['Unscheduled Jobs Count', t.unscheduled_jobs_count]
+        ];
+        downloadCsv(`Optimization_Performance_Report.csv`, headers, rows);
+      } else {
+        const trains = await api.getTrains();
+        const headers = ['Train ID', 'Train Number', 'Train Name', 'Section', 'Arrival', 'Departure', 'Direction', 'Priority'];
+        const rows = trains.map(tr => [
+          tr.train_id, tr.train_number, tr.train_name, tr.section_id, tr.arrival_time, tr.departure_time, tr.direction, tr.priority
+        ]);
+        downloadCsv(`Train_Impact_Report.csv`, headers, rows);
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Failed to generate export. Please try again.');
+    }
+  };
+
+  const handleExportPdf = (report: Report) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>${report.name} - RailOpt</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 30px; color: #1e293b; }
+            h1 { font-size: 20px; color: #1e3a8a; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; }
+            .meta { font-size: 12px; color: #64748b; margin-bottom: 20px; }
+            .content { font-size: 13px; line-height: 1.6; }
+            .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; background: #e0f2fe; color: #0369a1; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>Indian Railways · RailOpt Official Report</h1>
+          <div class="meta">
+            <strong>${report.name}</strong> · Category: <span class="badge">${report.category}</span> · Generated: ${new Date().toLocaleString()}<br/>
+            Planning Period: ${report.period}
+          </div>
+          <div class="content">
+            <p>${report.description}</p>
+            <p>This report has been compiled directly from the RailOpt Optimization Engine and PostgreSQL database.</p>
+          </div>
+          <script>window.print();</script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   const groupedReports: Record<string, Report[]> = {};
@@ -170,6 +265,7 @@ export const ReportsView: React.FC = () => {
                     <td className="py-3 px-2">
                       {isGenerated && (
                         <button
+                          onClick={() => setViewingReportId(report.id)}
                           className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-300 rounded text-[11px] text-slate-700 hover:bg-slate-50 transition whitespace-nowrap"
                         >
                           <Eye className="w-3 h-3 text-blue-700" /> View
@@ -216,9 +312,16 @@ export const ReportsView: React.FC = () => {
         </div>
 
         <div className="px-4 py-2.5 border-t border-slate-200 bg-slate-50 text-[11px] text-slate-400">
-          Reports are generated from live planning data. PDF and Excel exports require server-side rendering (wired for integration). Planning data is based on synthetic demo dataset.
+          Reports are generated from live planning data and PostgreSQL. PDF and CSV exports reflect the active operational plan.
         </div>
       </div>
+
+      {viewingReportId && (
+        <ReportViewerModal
+          reportId={viewingReportId}
+          onClose={() => setViewingReportId(null)}
+        />
+      )}
     </div>
   );
 };

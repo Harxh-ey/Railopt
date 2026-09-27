@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { RotateCcw, Play, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { RotateCcw, Play, CheckCircle2, AlertTriangle, RefreshCw, Lock } from 'lucide-react';
 import { api } from '../services/api';
 import { WhatIfResult, BlockWindow, MaintenanceJob, Resource } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 interface WhatIfSimulatorProps {
   onInspectBlock: (blockId: string) => void;
 }
 
 export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ onInspectBlock }) => {
+  const { isReadOnly } = useAuth();
+  const readOnly = isReadOnly();
   const [windows, setWindows] = useState<BlockWindow[]>([]);
   const [jobs, setJobs] = useState<MaintenanceJob[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
@@ -229,21 +232,29 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ onInspectBlock
 
           {/* Action Buttons */}
           <div className="mt-4 flex items-center gap-3">
-            <button
-              onClick={handleReoptimize}
-              disabled={loading || activeMutations.length === 0}
-              className="flex items-center gap-2 bg-railway-blue hover:bg-railway-blue-dark text-white text-xs font-semibold px-5 py-2 rounded border border-blue-900 transition disabled:opacity-50"
-            >
-              {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 fill-white" />}
-              Re-Optimize Schedule
-            </button>
-            <button
-              onClick={handleReset}
-              className="flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-2 rounded border border-slate-300 transition"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Reset to Baseline
-            </button>
+            {readOnly ? (
+              <span className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 text-slate-500 text-xs rounded border border-slate-200">
+                <Lock className="w-3.5 h-3.5" /> View Only — Re-optimization requires write access
+              </span>
+            ) : (
+              <>
+                <button
+                  onClick={handleReoptimize}
+                  disabled={loading || activeMutations.length === 0}
+                  className="flex items-center gap-2 bg-railway-blue hover:bg-railway-blue-dark text-white text-xs font-semibold px-5 py-2 rounded border border-blue-900 transition disabled:opacity-50"
+                >
+                  {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 fill-white" />}
+                  Re-Optimize Schedule
+                </button>
+                <button
+                  onClick={handleReset}
+                  className="flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-2 rounded border border-slate-300 transition"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Reset to Baseline
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

@@ -12,11 +12,16 @@ import { ReportsView } from './components/ReportsView';
 import { WhyThisBlockModal } from './components/WhyThisBlockModal';
 import { OptimizationRunsModal } from './components/OptimizationRunsModal';
 import { JobDetailModal } from './components/JobDetailModal';
+import { AdminPanel } from './components/AdminPanel';
+import { LoginPage } from './components/LoginPage';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { api } from './services/api';
 import { DashboardData, OptimizationRun, MaintenanceJob } from './types';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 
-export function App() {
+function MainApp() {
+  const { user, logout, isLoading: authLoading } = useAuth();
+  
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [telemetry, setTelemetry] = useState<OptimizationRun | null>(null);
@@ -40,8 +45,13 @@ export function App() {
     }, 4000);
   };
 
+  // Dashboard error state
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
+
   const fetchDashboard = () => {
+    if (!user) return;
     setLoading(true);
+    setDashboardError(null);
     Promise.all([
       api.getDashboard(),
       api.getLatestOptimization()
@@ -49,17 +59,21 @@ export function App() {
       .then(([dash, opt]) => {
         setDashboardData(dash);
         setTelemetry(opt.telemetry);
+        setDashboardError(null);
         setLoading(false);
       })
       .catch((err) => {
         console.error('Failed to load dashboard data', err);
+        setDashboardError(err.message || 'Unable to load planning data. Please verify network and server connection.');
         setLoading(false);
       });
   };
 
   useEffect(() => {
-    fetchDashboard();
-  }, []);
+    if (user) {
+      fetchDashboard();
+    }
+  }, [user]);
 
   const handleRunDemoSEC01 = () => {
     setActiveTab('planning');
@@ -108,6 +122,14 @@ export function App() {
     }
   };
 
+  if (authLoading) {
+    return <div className="min-h-screen bg-slate-100 flex items-center justify-center">Loading...</div>;
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 font-sans">
       {/* Government Portal Header & Navigation */}
@@ -119,6 +141,8 @@ export function App() {
         onReset={handleReset}
         isOptimizing={isOptimizing}
         onOpenRunsModal={() => setRunsModalOpen(true)}
+        user={user}
+        onLogout={logout}
       />
 
       {/* Page content area */}
@@ -150,6 +174,8 @@ export function App() {
           <DashboardView
             data={dashboardData}
             loading={loading}
+            error={dashboardError}
+            onRetry={fetchDashboard}
             onInspectBlock={(id) => setInspectBlockId(id)}
             onNavigateTab={(tab) => setActiveTab(tab)}
             onInspectJob={(job) => setSelectedJob(job)}
@@ -194,6 +220,10 @@ export function App() {
 
         {activeTab === 'datasources' && (
           <DataSourcesView />
+        )}
+        
+        {activeTab === 'admin' && (
+          <AdminPanel />
         )}
       </main>
 
@@ -256,6 +286,14 @@ export function App() {
         </div>
       )}
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <AuthProvider>
+      <MainApp />
+    </AuthProvider>
   );
 }
 

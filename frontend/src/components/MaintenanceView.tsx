@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Wrench, Search, ArrowUpDown, ChevronRight, RefreshCw
+  Wrench, Search, ArrowUpDown, ChevronRight, RefreshCw, Plus, X
 } from 'lucide-react';
 import { api } from '../services/api';
 import { MaintenanceJob } from '../types';
 import { JobDetailModal } from './JobDetailModal';
+import { useAuth } from '../contexts/AuthContext';
 
 interface MaintenanceViewProps {
   onInspectBlock?: (blockId: string) => void;
@@ -16,7 +17,52 @@ const deptBadge = (dept: string) => {
   return 'bg-cyan-50 text-cyan-800 border-cyan-200';
 };
 
+const DEPARTMENTS = ['Engineering', 'Traction Distribution', 'Signal & Telecommunication'];
+const TYPES = ['Preventive', 'Corrective', 'Emergency'];
+const BLOCK_REQS = ['TRAFFIC_BLOCK', 'POWER_BLOCK', 'BOTH'];
+const RESOURCES: Record<string, string[]> = {
+  Engineering: ['P-Way Gang', 'Track Machine', 'Bridge Inspection Team', 'Rail Grinding Team'],
+  'Traction Distribution': ['Cantilever & Insulator Replacement', 'OHE Maintenance Crew', 'Power Block Team', 'HV Inspection Unit'],
+  'Signal & Telecommunication': ['Signal Maintenance Team', 'Telecom Crew', 'Cable Jointing Team', 'S&T Inspection Unit'],
+};
+
+interface NewJobForm {
+  section_id: string;
+  asset_id: string;
+  department: string;
+  maintenance_type: string;
+  description: string;
+  duration_minutes: number;
+  criticality: number;
+  urgency: number;
+  asset_impact: number;
+  due_date: string;
+  required_resource: string;
+  block_requirement: string;
+  isolation_required: boolean;
+  compatible_departments: string[];
+}
+
+const EMPTY_FORM: NewJobForm = {
+  section_id: '',
+  asset_id: '',
+  department: 'Engineering',
+  maintenance_type: 'Preventive',
+  description: '',
+  duration_minutes: 60,
+  criticality: 5,
+  urgency: 5,
+  asset_impact: 5,
+  due_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+  required_resource: '',
+  block_requirement: 'TRAFFIC_BLOCK',
+  isolation_required: false,
+  compatible_departments: [],
+};
+
 export const MaintenanceView: React.FC<MaintenanceViewProps> = ({ onInspectBlock }) => {
+  const { user, isReadOnly } = useAuth();
+  const readOnly = isReadOnly();
   const [jobs, setJobs] = useState<MaintenanceJob[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -28,6 +74,13 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({ onInspectBlock
   const [selectedJob, setSelectedJob] = useState<MaintenanceJob | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 25;
+
+  // Register modal state
+  const [showRegister, setShowRegister] = useState(false);
+  const [form, setForm] = useState<NewJobForm>(EMPTY_FORM);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [submitSuccess, setSubmitSuccess] = useState('');
 
   useEffect(() => {
     api.getMaintenanceJobs()
@@ -68,6 +121,45 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({ onInspectBlock
     setCurrentPage(1);
   };
 
+  const setField = <K extends keyof NewJobForm>(key: K, value: NewJobForm[K]) =>
+    setForm((f) => ({ ...f, [key]: value }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setSubmitError('');
+    setSubmitSuccess('');
+    try {
+      const created = await api.createMaintenanceJob(form as any);
+      setJobs((prev) => [...prev, created]);
+      setSubmitSuccess(`Job ${created.job_id} registered — Priority Score: ${created.priority_score}`);
+      setForm(EMPTY_FORM);
+      setTimeout(() => { setShowRegister(false); setSubmitSuccess(''); }, 2500);
+    } catch (err: any) {
+      setSubmitError(err.message ?? 'Failed to register job. Check your inputs and try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const SliderField = ({
+    label, field, min = 1, max = 10,
+  }: { label: string; field: 'criticality' | 'urgency' | 'asset_impact'; min?: number; max?: number }) => (
+    <div>
+      <div className="flex justify-between items-center mb-1">
+        <label className="text-[11px] font-semibold text-slate-600">{label}</label>
+        <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
+          form[field] >= 8 ? 'bg-red-100 text-red-700' : form[field] >= 5 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
+        }`}>{form[field]}/10</span>
+      </div>
+      <input
+        type="range" min={min} max={max} value={form[field]}
+        onChange={(e) => setField(field, Number(e.target.value))}
+        className="w-full accent-blue-700"
+      />
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       {/* Filter Panel */}
@@ -85,9 +177,20 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({ onInspectBlock
               Consolidated work requests from Track Management (TMS), Signaling (SMMS), and Traction Distribution (TDMS)
             </p>
           </div>
-          <span className="text-xs text-slate-500">
-            Showing <strong className="text-slate-700">{sortedJobs.length}</strong> of {jobs.length} records
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500">
+              Showing <strong className="text-slate-700">{sortedJobs.length}</strong> of {jobs.length} records
+            </span>
+            {!readOnly && (
+              <button
+                onClick={() => { setShowRegister(true); setSubmitError(''); setSubmitSuccess(''); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 text-white text-xs font-semibold rounded hover:bg-blue-800 transition"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Register New Job
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="px-4 py-3 flex flex-wrap items-end gap-3">
@@ -286,10 +389,188 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({ onInspectBlock
         )}
       </div>
 
+      {/* ── Register New Job Modal ─────────────────────────────────── */}
+      {showRegister && (
+        <div className="fixed inset-0 z-50 flex">
+          {/* Backdrop */}
+          <div className="flex-1 bg-black/40" onClick={() => setShowRegister(false)} />
+
+          {/* Slide-in panel */}
+          <div className="w-full max-w-lg bg-white h-full overflow-y-auto shadow-2xl flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50 sticky top-0 z-10">
+              <div>
+                <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                  <Plus className="w-4 h-4 text-blue-700" />
+                  Register New Maintenance Job
+                </h2>
+                <p className="text-[11px] text-slate-500 mt-0.5">Job ID and Priority Score are auto-generated</p>
+              </div>
+              <button onClick={() => setShowRegister(false)} className="p-1.5 hover:bg-slate-200 rounded">
+                <X className="w-4 h-4 text-slate-500" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="flex-1 px-5 py-5 space-y-5">
+
+              {submitError && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded">{submitError}</div>
+              )}
+              {submitSuccess && (
+                <div className="p-3 bg-green-50 border border-green-200 text-green-700 text-xs rounded font-semibold">{submitSuccess}</div>
+              )}
+
+              {/* Section & Asset */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Section ID <span className="text-red-500">*</span></label>
+                  <input
+                    required value={form.section_id}
+                    onChange={(e) => setField('section_id', e.target.value.toUpperCase())}
+                    placeholder="e.g. SEC01"
+                    className="w-full border border-slate-300 rounded px-3 py-1.5 text-xs font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Asset ID <span className="text-red-500">*</span></label>
+                  <input
+                    required value={form.asset_id}
+                    onChange={(e) => setField('asset_id', e.target.value.toUpperCase())}
+                    placeholder="e.g. AST_SEC01_21"
+                    className="w-full border border-slate-300 rounded px-3 py-1.5 text-xs font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Department & Type */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Department <span className="text-red-500">*</span></label>
+                  <select
+                    value={form.department}
+                    onChange={(e) => { setField('department', e.target.value); setField('required_resource', ''); }}
+                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:border-blue-500"
+                  >
+                    {DEPARTMENTS.map((d) => <option key={d}>{d}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Maintenance Type <span className="text-red-500">*</span></label>
+                  <select
+                    value={form.maintenance_type}
+                    onChange={(e) => setField('maintenance_type', e.target.value)}
+                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:border-blue-500"
+                  >
+                    {TYPES.map((t) => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Description <span className="text-red-500">*</span></label>
+                <textarea
+                  required rows={2} value={form.description}
+                  onChange={(e) => setField('description', e.target.value)}
+                  placeholder="Describe the maintenance work to be performed..."
+                  className="w-full border border-slate-300 rounded px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500 resize-none"
+                />
+              </div>
+
+              {/* Duration & Due Date */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Duration (minutes) <span className="text-red-500">*</span></label>
+                  <input
+                    required type="number" min={10} max={480} value={form.duration_minutes}
+                    onChange={(e) => setField('duration_minutes', Number(e.target.value))}
+                    className="w-full border border-slate-300 rounded px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Due Date <span className="text-red-500">*</span></label>
+                  <input
+                    required type="date" value={form.due_date}
+                    onChange={(e) => setField('due_date', e.target.value)}
+                    className="w-full border border-slate-300 rounded px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Priority sliders */}
+              <div className="border border-slate-200 rounded p-3 bg-slate-50 space-y-3">
+                <p className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Priority Factors</p>
+                <SliderField label="Asset Criticality" field="criticality" />
+                <SliderField label="Urgency" field="urgency" />
+                <SliderField label="Asset Impact" field="asset_impact" />
+              </div>
+
+              {/* Required Resource */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Required Resource <span className="text-red-500">*</span></label>
+                <select
+                  required value={form.required_resource}
+                  onChange={(e) => setField('required_resource', e.target.value)}
+                  className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:border-blue-500"
+                >
+                  <option value="">— Select Resource —</option>
+                  {(RESOURCES[form.department] ?? []).map((r) => <option key={r}>{r}</option>)}
+                </select>
+              </div>
+
+              {/* Block Requirement & Isolation */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Block Requirement</label>
+                  <select
+                    value={form.block_requirement}
+                    onChange={(e) => setField('block_requirement', e.target.value)}
+                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:border-blue-500"
+                  >
+                    {BLOCK_REQS.map((b) => <option key={b}>{b}</option>)}
+                  </select>
+                </div>
+                <div className="flex flex-col justify-end">
+                  <label className="flex items-center gap-2 cursor-pointer border border-slate-300 rounded px-3 py-2 bg-white text-xs select-none">
+                    <input
+                      type="checkbox" checked={form.isolation_required}
+                      onChange={(e) => setField('isolation_required', e.target.checked)}
+                      className="rounded border-slate-400 text-blue-700"
+                    />
+                    <span className="text-slate-700 font-medium">Isolation Required</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Submit */}
+              <div className="pt-2 border-t border-slate-200 flex items-center gap-3">
+                <button
+                  type="submit" disabled={submitting}
+                  className="flex-1 py-2 bg-blue-700 text-white text-sm font-semibold rounded hover:bg-blue-800 transition disabled:opacity-60"
+                >
+                  {submitting ? 'Registering...' : 'Register Job'}
+                </button>
+                <button
+                  type="button" onClick={() => setShowRegister(false)}
+                  className="px-4 py-2 border border-slate-300 text-slate-600 text-sm rounded hover:bg-slate-100 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <JobDetailModal
         job={selectedJob}
         onClose={() => setSelectedJob(null)}
         onViewBlock={onInspectBlock}
+        onJobUpdated={(updated) => {
+          setJobs((prev) => prev.map((j) => (j.job_id === updated.job_id ? updated : j)));
+          setSelectedJob(updated);
+        }}
       />
     </div>
   );
